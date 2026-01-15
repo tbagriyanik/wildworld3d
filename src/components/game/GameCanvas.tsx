@@ -24,14 +24,13 @@ export function GameCanvas() {
     setTimeOfDay, 
     weather,
     updatePlayerStats,
-    player
   } = useGameStore();
 
   const createTerrain = useCallback((scene: THREE.Scene) => {
-    // Ground
-    const groundGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+    // Ground with grass texture simulation
+    const groundGeometry = new THREE.PlaneGeometry(200, 200, 100, 100);
     const groundMaterial = new THREE.MeshLambertMaterial({ 
-      color: 0x4a7c59,
+      color: 0x5a8f3e,
     });
     
     // Add some height variation
@@ -39,7 +38,7 @@ export function GameCanvas() {
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
       const y = positions.getY(i);
-      positions.setZ(i, Math.sin(x * 0.1) * Math.cos(y * 0.1) * 2 + Math.random() * 0.5);
+      positions.setZ(i, Math.sin(x * 0.05) * Math.cos(y * 0.05) * 1 + Math.random() * 0.3);
     }
     groundGeometry.computeVertexNormals();
     
@@ -55,23 +54,33 @@ export function GameCanvas() {
     const group = new THREE.Group();
     
     // Trunk
-    const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.4, 3, 8);
-    const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const trunkGeometry = new THREE.CylinderGeometry(0.25, 0.35, 2.5, 8);
+    const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3728 });
     const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.y = 1.5;
+    trunk.position.y = 1.25;
     trunk.castShadow = true;
     group.add(trunk);
     
-    // Foliage
-    const foliageGeometry = new THREE.ConeGeometry(2, 4, 8);
-    const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-    const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
-    foliage.position.y = 4.5;
-    foliage.castShadow = true;
-    group.add(foliage);
+    // Foliage - multiple cones for fuller look
+    const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x2d5a27 });
+    
+    const cone1 = new THREE.Mesh(new THREE.ConeGeometry(2, 3, 8), foliageMaterial);
+    cone1.position.y = 4;
+    cone1.castShadow = true;
+    group.add(cone1);
+    
+    const cone2 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2.5, 8), foliageMaterial);
+    cone2.position.y = 5.5;
+    cone2.castShadow = true;
+    group.add(cone2);
+    
+    const cone3 = new THREE.Mesh(new THREE.ConeGeometry(1, 2, 8), foliageMaterial);
+    cone3.position.y = 6.8;
+    cone3.castShadow = true;
+    group.add(cone3);
     
     group.position.set(x, 0, z);
-    group.userData = { type: 'tree', gatherable: true, resource: 'wood' };
+    group.userData = { type: 'tree', gatherable: true, resource: 'wood', resourceKey: 'wood', icon: '🪵' };
     
     scene.add(group);
     worldObjectsRef.current.push(group);
@@ -80,15 +89,15 @@ export function GameCanvas() {
   }, []);
 
   const createRock = useCallback((scene: THREE.Scene, x: number, z: number) => {
-    const geometry = new THREE.DodecahedronGeometry(0.8, 0);
-    const material = new THREE.MeshLambertMaterial({ color: 0x808080 });
+    const geometry = new THREE.DodecahedronGeometry(0.7, 0);
+    const material = new THREE.MeshLambertMaterial({ color: 0x6b6b6b });
     const rock = new THREE.Mesh(geometry, material);
     
-    rock.position.set(x, 0.4, z);
+    rock.position.set(x, 0.35, z);
     rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
-    rock.scale.set(1 + Math.random() * 0.5, 0.8 + Math.random() * 0.4, 1 + Math.random() * 0.5);
+    rock.scale.set(1 + Math.random() * 0.4, 0.7 + Math.random() * 0.3, 1 + Math.random() * 0.4);
     rock.castShadow = true;
-    rock.userData = { type: 'rock', gatherable: true, resource: 'stone' };
+    rock.userData = { type: 'rock', gatherable: true, resource: 'stone', resourceKey: 'stone', icon: '🪨' };
     
     scene.add(rock);
     worldObjectsRef.current.push(rock);
@@ -97,31 +106,50 @@ export function GameCanvas() {
   }, []);
 
   const createBush = useCallback((scene: THREE.Scene, x: number, z: number) => {
-    const geometry = new THREE.SphereGeometry(0.6, 8, 8);
-    const material = new THREE.MeshLambertMaterial({ color: 0x2d5a27 });
-    const bush = new THREE.Mesh(geometry, material);
+    const group = new THREE.Group();
+    const bushMaterial = new THREE.MeshLambertMaterial({ color: 0x3d7a35 });
     
-    bush.position.set(x, 0.4, z);
-    bush.scale.set(1, 0.7, 1);
-    bush.castShadow = true;
-    bush.userData = { type: 'bush', gatherable: true, resource: Math.random() > 0.5 ? 'apple' : 'berry' };
+    // Multiple spheres for bush effect
+    for (let i = 0; i < 3; i++) {
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.4 + Math.random() * 0.2, 8, 8),
+        bushMaterial
+      );
+      sphere.position.set(
+        (Math.random() - 0.5) * 0.4,
+        0.3 + Math.random() * 0.2,
+        (Math.random() - 0.5) * 0.4
+      );
+      sphere.castShadow = true;
+      group.add(sphere);
+    }
     
-    scene.add(bush);
-    worldObjectsRef.current.push(bush);
+    const isBerry = Math.random() > 0.5;
+    group.position.set(x, 0, z);
+    group.userData = { 
+      type: 'bush', 
+      gatherable: true, 
+      resource: isBerry ? 'berry' : 'apple',
+      resourceKey: isBerry ? 'berry' : 'apple',
+      icon: isBerry ? '🫐' : '🍎'
+    };
     
-    return bush;
+    scene.add(group);
+    worldObjectsRef.current.push(group);
+    
+    return group;
   }, []);
 
   const createWater = useCallback((scene: THREE.Scene, x: number, z: number) => {
-    const geometry = new THREE.CircleGeometry(5, 32);
+    const geometry = new THREE.CircleGeometry(6, 32);
     const material = new THREE.MeshLambertMaterial({ 
-      color: 0x4682B4, 
+      color: 0x4a90a4, 
       transparent: true, 
-      opacity: 0.7 
+      opacity: 0.8 
     });
     const water = new THREE.Mesh(geometry, material);
     
-    water.position.set(x, 0.1, z);
+    water.position.set(x, 0.05, z);
     water.rotation.x = -Math.PI / 2;
     water.userData = { type: 'water', gatherable: false };
     
@@ -180,7 +208,6 @@ export function GameCanvas() {
       
       positions.setY(i, y);
       
-      // Add some drift for snow
       if (weatherType === 'snow') {
         positions.setX(i, positions.getX(i) + (Math.random() - 0.5) * 0.1);
       }
@@ -200,7 +227,6 @@ export function GameCanvas() {
     if (intersects.length > 0) {
       let object = intersects[0].object;
       
-      // Find parent with userData
       while (object.parent && !object.userData.type) {
         object = object.parent as THREE.Object3D;
       }
@@ -210,12 +236,21 @@ export function GameCanvas() {
         const resource = resourceItems[resourceId];
         
         if (resource) {
-          addItem(resource, Math.floor(Math.random() * 2) + 1);
+          const quantity = Math.floor(Math.random() * 2) + 1;
+          addItem(resource, quantity);
+          
+          // Dispatch gather event for notification
+          window.dispatchEvent(new CustomEvent('gather', {
+            detail: {
+              resourceKey: object.userData.resourceKey,
+              icon: object.userData.icon,
+              quantity
+            }
+          }));
           
           // Visual feedback - shrink and remove
-          const originalScale = object.scale.clone();
           const shrinkInterval = setInterval(() => {
-            object.scale.multiplyScalar(0.9);
+            object.scale.multiplyScalar(0.85);
             if (object.scale.x < 0.1) {
               clearInterval(shrinkInterval);
               sceneRef.current?.remove(object);
@@ -238,7 +273,7 @@ export function GameCanvas() {
                     createBush(sceneRef.current, newX, newZ);
                   }
                 }
-              }, 30000);
+              }, 20000);
             }
           }, 50);
         }
@@ -275,7 +310,7 @@ export function GameCanvas() {
     rendererRef.current = renderer;
     
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
     scene.add(ambientLight);
     
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
@@ -291,39 +326,44 @@ export function GameCanvas() {
     directionalLight.shadow.camera.bottom = -100;
     scene.add(directionalLight);
     
+    // Hemisphere light for better ambient
+    const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x5a8f3e, 0.4);
+    scene.add(hemiLight);
+    
     // Create world
     createTerrain(scene);
     
-    // Add trees
-    for (let i = 0; i < 50; i++) {
-      const x = (Math.random() - 0.5) * 100;
-      const z = (Math.random() - 0.5) * 100;
-      if (Math.abs(x) > 5 || Math.abs(z) > 5) {
+    // Add trees in clusters
+    for (let i = 0; i < 60; i++) {
+      const x = (Math.random() - 0.5) * 120;
+      const z = (Math.random() - 0.5) * 120;
+      if (Math.abs(x) > 8 || Math.abs(z) > 8) {
         createTree(scene, x, z);
       }
     }
     
     // Add rocks
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 35; i++) {
       const x = (Math.random() - 0.5) * 100;
       const z = (Math.random() - 0.5) * 100;
-      if (Math.abs(x) > 3 || Math.abs(z) > 3) {
+      if (Math.abs(x) > 5 || Math.abs(z) > 5) {
         createRock(scene, x, z);
       }
     }
     
     // Add bushes
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 30; i++) {
       const x = (Math.random() - 0.5) * 100;
       const z = (Math.random() - 0.5) * 100;
-      if (Math.abs(x) > 3 || Math.abs(z) > 3) {
+      if (Math.abs(x) > 5 || Math.abs(z) > 5) {
         createBush(scene, x, z);
       }
     }
     
     // Add water sources
-    createWater(scene, 20, 20);
-    createWater(scene, -30, -15);
+    createWater(scene, 25, 25);
+    createWater(scene, -35, -20);
+    createWater(scene, 40, -30);
     
     // Controls
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -369,7 +409,6 @@ export function GameCanvas() {
       renderer.setSize(window.innerWidth, window.innerHeight);
     };
     
-    // Number key for hotbar
     const handleNumberKey = (e: KeyboardEvent) => {
       const num = parseInt(e.key);
       if (num >= 1 && num <= 8) {
@@ -407,11 +446,7 @@ export function GameCanvas() {
         direction.normalize();
         direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRef.current.rotation.y);
         playerRef.current.position.add(direction.multiplyScalar(speed * delta));
-        
-        // Keep player above ground
         playerRef.current.position.y = 2;
-        
-        // Boundary
         playerRef.current.position.x = Math.max(-90, Math.min(90, playerRef.current.position.x));
         playerRef.current.position.z = Math.max(-90, Math.min(90, playerRef.current.position.z));
       }
@@ -423,7 +458,7 @@ export function GameCanvas() {
       camera.rotation.x = playerRef.current.rotation.x;
       
       // Day/night cycle
-      dayTime += delta * 0.01;
+      dayTime += delta * 0.008;
       if (dayTime > 1) dayTime = 0;
       setTimeOfDay(dayTime);
       
@@ -437,19 +472,23 @@ export function GameCanvas() {
         scene.background = new THREE.Color(0x1a1a2e);
         scene.fog = new THREE.Fog(0x1a1a2e, 30, 80);
         directionalLight.intensity = 0.2;
-        ambientLight.intensity = 0.1;
+        ambientLight.intensity = 0.15;
       } else if (dayTime < 0.3 || dayTime > 0.75) {
-        // Dawn/Dusk
-        scene.background = new THREE.Color(0xff7e5f);
-        scene.fog = new THREE.Fog(0xff7e5f, 40, 100);
+        // Dawn/Dusk - beautiful sunset colors
+        const t = dayTime < 0.3 ? (dayTime - 0.2) / 0.1 : (0.85 - dayTime) / 0.1;
+        const sunsetColor = new THREE.Color().setHSL(0.08, 0.8, 0.5 + t * 0.2);
+        scene.background = sunsetColor;
+        scene.fog = new THREE.Fog(sunsetColor, 40, 100);
         directionalLight.intensity = 0.6;
-        ambientLight.intensity = 0.3;
+        ambientLight.intensity = 0.4;
+        directionalLight.color = new THREE.Color(0xffd4a0);
       } else {
         // Day
         scene.background = new THREE.Color(0x87CEEB);
         scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
         directionalLight.intensity = 1;
-        ambientLight.intensity = 0.5;
+        ambientLight.intensity = 0.6;
+        directionalLight.color = new THREE.Color(0xffffff);
       }
       
       // Weather particles
@@ -466,23 +505,22 @@ export function GameCanvas() {
       
       // Update player stats
       statsTimer += delta;
-      if (statsTimer > 2) {
+      if (statsTimer > 3) {
         statsTimer = 0;
         const state = useGameStore.getState();
         updatePlayerStats({
-          hunger: Math.max(0, state.player.hunger - 0.5),
-          thirst: Math.max(0, state.player.thirst - 0.7),
+          hunger: Math.max(0, state.player.hunger - 0.3),
+          thirst: Math.max(0, state.player.thirst - 0.5),
           temperature: currentWeather === 'snow' 
-            ? Math.max(0, state.player.temperature - 1)
+            ? Math.max(0, state.player.temperature - 0.8)
             : currentWeather === 'rain'
-            ? Math.max(20, state.player.temperature - 0.5)
-            : Math.min(50, state.player.temperature + 0.2),
+            ? Math.max(20, state.player.temperature - 0.3)
+            : Math.min(50, state.player.temperature + 0.1),
         });
         
-        // Health effects
         if (state.player.hunger < 10 || state.player.thirst < 10) {
           updatePlayerStats({
-            health: Math.max(0, state.player.health - 1),
+            health: Math.max(0, state.player.health - 0.5),
           });
         }
       }
@@ -492,7 +530,6 @@ export function GameCanvas() {
     
     animate();
     
-    // Cleanup
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keydown', handleNumberKey);
@@ -509,7 +546,6 @@ export function GameCanvas() {
     };
   }, [createTerrain, createTree, createRock, createBush, createWater, handleGather, setPlayerRotation, setTimeOfDay, createWeatherParticles, updateWeatherParticles, updatePlayerStats]);
 
-  // Handle weather changes
   useEffect(() => {
     if (!sceneRef.current) return;
     

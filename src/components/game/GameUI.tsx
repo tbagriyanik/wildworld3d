@@ -3,50 +3,12 @@ import { Inventory } from './Inventory';
 import { Hotbar } from './Hotbar';
 import { Compass } from './Compass';
 import { CraftingMenu } from './CraftingMenu';
-import { TimeWeatherDisplay } from './TimeWeatherDisplay';
 import { LanguageToggle } from './LanguageToggle';
+import { GatherNotification } from './GatherNotification';
 import { useGameStore } from '@/game/gameState';
 import { t } from '@/game/localization';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Cloud, CloudRain, CloudSnow } from 'lucide-react';
-
-function WeatherSelector() {
-  const { weather, setWeather, language } = useGameStore();
-  
-  return (
-    <div className="glass-panel p-2 flex gap-1">
-      <Button
-        variant={weather === 'clear' ? 'default' : 'ghost'}
-        size="icon"
-        onClick={() => setWeather('clear')}
-        className="w-8 h-8"
-        title={t('clear', language)}
-      >
-        <Cloud className="w-4 h-4" />
-      </Button>
-      <Button
-        variant={weather === 'rain' ? 'default' : 'ghost'}
-        size="icon"
-        onClick={() => setWeather('rain')}
-        className="w-8 h-8"
-        title={t('rain', language)}
-      >
-        <CloudRain className="w-4 h-4" />
-      </Button>
-      <Button
-        variant={weather === 'snow' ? 'default' : 'ghost'}
-        size="icon"
-        onClick={() => setWeather('snow')}
-        className="w-8 h-8"
-        title={t('snow', language)}
-      >
-        <CloudSnow className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-}
 
 function StartScreen() {
   const { language } = useGameStore();
@@ -104,13 +66,14 @@ function StartScreen() {
 function Crosshair() {
   return (
     <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-40">
-      <div className="w-2 h-2 border-2 border-foreground/50 rounded-full" />
+      <div className="w-1.5 h-1.5 bg-foreground/70 rounded-full" />
     </div>
   );
 }
 
 export function GameUI() {
   const [showStart, setShowStart] = useState(true);
+  const [notification, setNotification] = useState<{ message: string; icon: string } | null>(null);
   
   useEffect(() => {
     const handleClick = () => {
@@ -122,6 +85,27 @@ export function GameUI() {
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, [showStart]);
+
+  // Listen for gather events
+  useEffect(() => {
+    const handleGather = (e: CustomEvent) => {
+      const { language } = useGameStore.getState();
+      const resourceName = e.detail.resourceKey;
+      const icon = e.detail.icon;
+      const message = language === 'tr' 
+        ? `${t(resourceName, language).toUpperCase()} TOPLANDI`
+        : `${t(resourceName, language).toUpperCase()} GATHERED`;
+      
+      setNotification({ message, icon });
+      
+      setTimeout(() => {
+        setNotification(null);
+      }, 2000);
+    };
+    
+    window.addEventListener('gather' as any, handleGather);
+    return () => window.removeEventListener('gather' as any, handleGather);
+  }, []);
   
   return (
     <>
@@ -138,23 +122,23 @@ export function GameUI() {
             <StatusBars />
           </div>
           
-          {/* Top Center - Compass */}
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30">
+          {/* Top Right - Compass and Language */}
+          <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
             <Compass />
-          </div>
-          
-          {/* Top Right - Time, Weather, Language */}
-          <div className="fixed top-4 right-4 z-30 flex flex-col gap-2 items-end">
-            <TimeWeatherDisplay />
-            <div className="flex gap-2">
-              <WeatherSelector />
-              <LanguageToggle />
-            </div>
+            <LanguageToggle />
           </div>
           
           {/* Right Side - Inventory */}
           <div className="fixed top-1/2 -translate-y-1/2 right-4 z-30">
             <Inventory />
+          </div>
+          
+          {/* Bottom Left - Gather Notification */}
+          <div className="fixed bottom-24 left-4 z-30">
+            <GatherNotification 
+              message={notification?.message || null} 
+              icon={notification?.icon || null} 
+            />
           </div>
           
           {/* Bottom Center - Hotbar */}
