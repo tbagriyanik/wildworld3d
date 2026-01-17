@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '@/game/gameState';
 import { resourceItems } from '@/game/recipes';
+import { Animal } from '@/game/types';
+import { createAnimal, updateAnimalAI, damageAnimal } from '@/game/animalAI';
 
 export function GameCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -17,6 +19,7 @@ export function GameCanvas() {
   const clockRef = useRef(new THREE.Clock());
   const worldObjectsRef = useRef<THREE.Object3D[]>([]);
   const particlesRef = useRef<THREE.Points | null>(null);
+  const animalMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   
   const { 
     addItem, 
@@ -24,6 +27,12 @@ export function GameCanvas() {
     setTimeOfDay, 
     weather,
     updatePlayerStats,
+    damagePlayer,
+    animals,
+    setAnimals,
+    updateAnimal,
+    removeAnimal,
+    addAnimal,
   } = useGameStore();
 
   const createTerrain = useCallback((scene: THREE.Scene) => {
@@ -158,6 +167,67 @@ export function GameCanvas() {
     return water;
   }, []);
 
+  const createAnimalMesh = useCallback((scene: THREE.Scene, animal: Animal) => {
+    const group = new THREE.Group();
+    
+    const colors = {
+      deer: 0x8B4513,
+      rabbit: 0xA0826D,
+      wolf: 0x4A4A4A,
+    };
+    
+    const sizes = {
+      deer: { body: 0.8, height: 1.2 },
+      rabbit: { body: 0.25, height: 0.3 },
+      wolf: { body: 0.6, height: 0.8 },
+    };
+    
+    const config = sizes[animal.type];
+    const color = colors[animal.type];
+    
+    // Body
+    const bodyGeometry = new THREE.CapsuleGeometry(config.body * 0.5, config.body, 8, 8);
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.rotation.z = Math.PI / 2;
+    body.position.y = config.height;
+    body.castShadow = true;
+    group.add(body);
+    
+    // Head
+    const headGeometry = new THREE.SphereGeometry(config.body * 0.4, 8, 8);
+    const head = new THREE.Mesh(headGeometry, bodyMaterial);
+    head.position.set(config.body * 0.8, config.height * 1.1, 0);
+    head.castShadow = true;
+    group.add(head);
+    
+    // Legs
+    const legGeometry = new THREE.CylinderGeometry(config.body * 0.1, config.body * 0.1, config.height * 0.8, 6);
+    const positions = [
+      [-config.body * 0.3, 0, config.body * 0.3],
+      [-config.body * 0.3, 0, -config.body * 0.3],
+      [config.body * 0.3, 0, config.body * 0.3],
+      [config.body * 0.3, 0, -config.body * 0.3],
+    ];
+    
+    positions.forEach(([x, y, z]) => {
+      const leg = new THREE.Mesh(legGeometry, bodyMaterial);
+      leg.position.set(x, config.height * 0.4, z);
+      leg.castShadow = true;
+      group.add(leg);
+    });
+    
+    group.position.set(animal.position.x, 0, animal.position.z);
+    group.rotation.y = animal.rotation;
+    group.userData = { type: 'animal', animalId: animal.id, animalType: animal.type };
+    
+    scene.add(group);
+    animalMeshesRef.current.set(animal.id, group);
+    worldObjectsRef.current.push(group);
+    
+    return group;
+  }, []);
+
   const createWeatherParticles = useCallback((scene: THREE.Scene, type: 'rain' | 'snow') => {
     if (particlesRef.current) {
       scene.remove(particlesRef.current);
@@ -231,6 +301,60 @@ export function GameCanvas() {
         object = object.parent as THREE.Object3D;
       }
       
+      // Handle animal hunting
+      if (object.userData.type === 'animal') {
+        const animalId = object.userData.animalId;
+        const animalData = useGameStore.getState().animals.find(a => a.id === animalId);
+        
+        if (animalData && animalData.behavior !== 'dead') {
+          const updates = damageAnimal(animalData, 25);
+          updateAnimal(animalId, updates);
+          
+          if (updates.behavior === 'dead') {
+            // Give drops
+            animalData.drops.forEach(drop => {
+              const resource = resourceItems[drop.itemId as keyof typeof resourceItems];
+              if (resource) {
+                addItem(resource, drop.quantity);
+              }
+            });
+            
+            // Dispatch hunt event
+            window.dispatchEvent(new CustomEvent('gather', {
+              detail: {
+                resourceKey: animalData.type,
+                icon: animalData.type === 'deer' ? '🦌' : animalData.type === 'rabbit' ? '🐰' : '🐺',
+                quantity: 1
+              }
+            }));
+            
+            // Remove mesh after delay
+            setTimeout(() => {
+              const mesh = animalMeshesRef.current.get(animalId);
+              if (mesh && sceneRef.current) {
+                sceneRef.current.remove(mesh);
+                animalMeshesRef.current.delete(animalId);
+                const idx = worldObjectsRef.current.indexOf(mesh);
+                if (idx > -1) worldObjectsRef.current.splice(idx, 1);
+              }
+              removeAnimal(animalId);
+              
+              // Respawn new animal
+              setTimeout(() => {
+                const types: Animal['type'][] = ['deer', 'rabbit', 'wolf'];
+                const newType = types[Math.floor(Math.random() * types.length)];
+                const newAnimal = createAnimal(newType, {
+                  x: (Math.random() - 0.5) * 80,
+                  z: (Math.random() - 0.5) * 80,
+                });
+                addAnimal(newAnimal);
+              }, 15000);
+            }, 2000);
+          }
+        }
+        return;
+      }
+      
       if (object.userData.gatherable && object.userData.resource) {
         const resourceId = object.userData.resource as keyof typeof resourceItems;
         const resource = resourceItems[resourceId];
@@ -239,7 +363,6 @@ export function GameCanvas() {
           const quantity = Math.floor(Math.random() * 2) + 1;
           addItem(resource, quantity);
           
-          // Dispatch gather event for notification
           window.dispatchEvent(new CustomEvent('gather', {
             detail: {
               resourceKey: object.userData.resourceKey,
@@ -248,7 +371,6 @@ export function GameCanvas() {
             }
           }));
           
-          // Visual feedback - shrink and remove
           const shrinkInterval = setInterval(() => {
             object.scale.multiplyScalar(0.85);
             if (object.scale.x < 0.1) {
@@ -259,7 +381,6 @@ export function GameCanvas() {
                 worldObjectsRef.current.splice(index, 1);
               }
               
-              // Respawn after delay
               setTimeout(() => {
                 if (sceneRef.current) {
                   const newX = (Math.random() - 0.5) * 80;
@@ -279,7 +400,7 @@ export function GameCanvas() {
         }
       }
     }
-  }, [addItem, createTree, createRock, createBush]);
+  }, [addItem, createTree, createRock, createBush, updateAnimal, removeAnimal, addAnimal]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -364,6 +485,21 @@ export function GameCanvas() {
     createWater(scene, 25, 25);
     createWater(scene, -35, -20);
     createWater(scene, 40, -30);
+    
+    // Spawn initial animals
+    const initialAnimals: Animal[] = [];
+    const animalTypes: Animal['type'][] = ['deer', 'rabbit', 'wolf'];
+    for (let i = 0; i < 8; i++) {
+      const type = animalTypes[Math.floor(Math.random() * animalTypes.length)];
+      const x = (Math.random() - 0.5) * 80;
+      const z = (Math.random() - 0.5) * 80;
+      if (Math.abs(x) > 10 || Math.abs(z) > 10) {
+        const animal = createAnimal(type, { x, z });
+        initialAnimals.push(animal);
+        createAnimalMesh(scene, animal);
+      }
+    }
+    setAnimals(initialAnimals);
     
     // Controls
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -457,6 +593,39 @@ export function GameCanvas() {
       camera.rotation.y = playerRef.current.rotation.y;
       camera.rotation.x = playerRef.current.rotation.x;
       
+      // Update animals AI
+      const currentAnimals = useGameStore.getState().animals;
+      const playerPos = { x: playerRef.current.position.x, z: playerRef.current.position.z };
+      
+      currentAnimals.forEach(animal => {
+        if (animal.behavior === 'dead') return;
+        
+        const updates = updateAnimalAI(animal, playerPos, delta * 60);
+        if (Object.keys(updates).length > 0) {
+          useGameStore.getState().updateAnimal(animal.id, updates);
+        }
+        
+        // Update mesh position
+        const mesh = animalMeshesRef.current.get(animal.id);
+        if (mesh && updates.position) {
+          mesh.position.set(updates.position.x, 0, updates.position.z);
+        }
+        if (mesh && updates.rotation !== undefined) {
+          mesh.rotation.y = updates.rotation;
+        }
+        
+        // Wolf attacks player
+        if (animal.type === 'wolf' && animal.behavior === 'attacking') {
+          const dist = Math.sqrt(
+            Math.pow(animal.position.x - playerPos.x, 2) +
+            Math.pow(animal.position.z - playerPos.z, 2)
+          );
+          if (dist < 2) {
+            useGameStore.getState().damagePlayer(0.1);
+          }
+        }
+      });
+      
       // Day/night cycle
       dayTime += delta * 0.008;
       if (dayTime > 1) dayTime = 0;
@@ -544,7 +713,7 @@ export function GameCanvas() {
       }
       renderer.dispose();
     };
-  }, [createTerrain, createTree, createRock, createBush, createWater, handleGather, setPlayerRotation, setTimeOfDay, createWeatherParticles, updateWeatherParticles, updatePlayerStats]);
+  }, [createTerrain, createTree, createRock, createBush, createWater, handleGather, setPlayerRotation, setTimeOfDay, createWeatherParticles, updateWeatherParticles, updatePlayerStats, createAnimalMesh, setAnimals]);
 
   useEffect(() => {
     if (!sceneRef.current) return;

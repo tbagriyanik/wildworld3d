@@ -34,6 +34,21 @@ export interface WorldObject {
   health?: number;
 }
 
+export interface Animal {
+  id: string;
+  type: 'deer' | 'rabbit' | 'wolf';
+  position: { x: number; y: number; z: number };
+  rotation: number;
+  health: number;
+  maxHealth: number;
+  speed: number;
+  behavior: 'idle' | 'wandering' | 'fleeing' | 'attacking' | 'dead';
+  targetPosition?: { x: number; z: number };
+  lastBehaviorChange: number;
+  drops: { itemId: string; quantity: number }[];
+  mesh?: any;
+}
+
 export type TimeOfDay = 'dawn' | 'day' | 'dusk' | 'night';
 export type Weather = 'clear' | 'rain' | 'snow';
 export type Language = 'en' | 'tr';
@@ -44,9 +59,10 @@ export interface GameState {
   hotbar: (InventoryItem | null)[];
   selectedSlot: number;
   timeOfDay: TimeOfDay;
-  dayTime: number; // 0-1 representing full day cycle
+  dayTime: number;
   weather: Weather;
   language: Language;
   isPaused: boolean;
   isCraftingOpen: boolean;
+  animals: Animal[];
 }

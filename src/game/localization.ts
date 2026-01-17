@@ -49,9 +49,15 @@ const translations: Record<Language, Record<string, string>> = {
     rain: 'Rain',
     snow: 'Snow',
     
+    // Animals
+    deer: 'Deer',
+    rabbit: 'Rabbit',
+    wolf: 'Wolf',
+    hunted: 'Hunted',
+    
     // Instructions
     clickToStart: 'Click to Start',
-    controls: 'WASD - Move | Mouse - Look | Click - Gather | E - Crafting | Tab - Inventory',
+    controls: 'WASD - Move | Mouse - Look | Click - Hunt/Gather | E - Crafting',
     mobileControls: 'Drag to look | Joystick to move | Tap to gather',
   },
   tr: {
@@ -102,9 +108,15 @@ const translations: Record<Language, Record<string, string>> = {
     rain: 'Yağmur',
     snow: 'Kar',
     
+    // Animals
+    deer: 'Geyik',
+    rabbit: 'Tavşan',
+    wolf: 'Kurt',
+    hunted: 'Avlandı',
+    
     // Instructions
     clickToStart: 'Başlamak için tıkla',
-    controls: 'WASD - Hareket | Mouse - Bak | Tıkla - Topla | E - Üretim | Tab - Envanter',
+    controls: 'WASD - Hareket | Mouse - Bak | Tıkla - Avla/Topla | E - Üretim',
     mobileControls: 'Bakmak için sürükle | Hareket için joystick | Toplamak için dokun',
   },
 };

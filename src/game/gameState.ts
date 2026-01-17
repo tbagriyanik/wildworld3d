@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, InventoryItem, PlayerStats } from './types';
+import { GameState, InventoryItem, PlayerStats, Animal } from './types';
 
 interface GameStore extends GameState {
   // Player actions
@@ -28,6 +28,12 @@ interface GameStore extends GameState {
   // Player rotation for compass
   playerRotation: number;
   setPlayerRotation: (rotation: number) => void;
+  
+  // Animal actions
+  setAnimals: (animals: Animal[]) => void;
+  updateAnimal: (id: string, updates: Partial<Animal>) => void;
+  removeAnimal: (id: string) => void;
+  addAnimal: (animal: Animal) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -47,6 +53,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isPaused: false,
   isCraftingOpen: false,
   playerRotation: 0,
+  animals: [],
   
   updatePlayerStats: (stats) =>
     set((state) => ({
@@ -138,4 +145,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setLanguage: (language) => set({ language }),
   
   setPlayerRotation: (rotation) => set({ playerRotation: rotation }),
+  
+  setAnimals: (animals) => set({ animals }),
+  
+  updateAnimal: (id, updates) =>
+    set((state) => ({
+      animals: state.animals.map((a) =>
+        a.id === id ? { ...a, ...updates } : a
+      ),
+    })),
+    
+  removeAnimal: (id) =>
+    set((state) => ({
+      animals: state.animals.filter((a) => a.id !== id),
+    })),
+    
+  addAnimal: (animal) =>
+    set((state) => ({
+      animals: [...state.animals, animal],
+    })),
 }));
