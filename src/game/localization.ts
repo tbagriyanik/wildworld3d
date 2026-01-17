@@ -55,9 +55,14 @@ const translations: Record<Language, Record<string, string>> = {
     wolf: 'Wolf',
     hunted: 'Hunted',
     
+    // Save/Load
+    continue_game: 'Continue',
+    new_game: 'New Game',
+    game_saved: 'Game Saved!',
+    
     // Instructions
     clickToStart: 'Click to Start',
-    controls: 'WASD - Move | Mouse - Look | Click - Hunt/Gather | E - Crafting',
+    controls: 'WASD - Move | Mouse - Look | Click - Hunt/Gather | E - Crafting | F5 - Save',
     mobileControls: 'Drag to look | Joystick to move | Tap to gather',
   },
   tr: {
@@ -114,9 +119,14 @@ const translations: Record<Language, Record<string, string>> = {
     wolf: 'Kurt',
     hunted: 'Avlandı',
     
+    // Save/Load
+    continue_game: 'Devam Et',
+    new_game: 'Yeni Oyun',
+    game_saved: 'Oyun Kaydedildi!',
+    
     // Instructions
     clickToStart: 'Başlamak için tıkla',
-    controls: 'WASD - Hareket | Mouse - Bak | Tıkla - Avla/Topla | E - Üretim',
+    controls: 'WASD - Hareket | Mouse - Bak | Tıkla - Avla/Topla | E - Üretim | F5 - Kaydet',
     mobileControls: 'Bakmak için sürükle | Hareket için joystick | Toplamak için dokun',
   },
 };

@@ -1,5 +1,20 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { GameState, InventoryItem, PlayerStats, Animal } from './types';
+
+const SAVE_KEY = 'wild-lands-save';
+
+interface SaveData {
+  player: PlayerStats;
+  inventory: InventoryItem[];
+  hotbar: (InventoryItem | null)[];
+  selectedSlot: number;
+  dayTime: number;
+  weather: GameState['weather'];
+  language: GameState['language'];
+  playerPosition?: { x: number; y: number; z: number };
+  playerRotationY?: number;
+}
 
 interface GameStore extends GameState {
   // Player actions
@@ -34,6 +49,14 @@ interface GameStore extends GameState {
   updateAnimal: (id: string, updates: Partial<Animal>) => void;
   removeAnimal: (id: string) => void;
   addAnimal: (animal: Animal) => void;
+  
+  // Save/Load
+  playerPosition: { x: number; y: number; z: number };
+  setPlayerPosition: (pos: { x: number; y: number; z: number }) => void;
+  saveGame: () => void;
+  loadGame: () => boolean;
+  hasSavedGame: () => boolean;
+  deleteSave: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -54,6 +77,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isCraftingOpen: false,
   playerRotation: 0,
   animals: [],
+  playerPosition: { x: 0, y: 2, z: 0 },
   
   updatePlayerStats: (stats) =>
     set((state) => ({
@@ -164,4 +188,56 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       animals: [...state.animals, animal],
     })),
+    
+  setPlayerPosition: (pos) => set({ playerPosition: pos }),
+  
+  saveGame: () => {
+    const state = get();
+    const saveData: SaveData = {
+      player: state.player,
+      inventory: state.inventory,
+      hotbar: state.hotbar,
+      selectedSlot: state.selectedSlot,
+      dayTime: state.dayTime,
+      weather: state.weather,
+      language: state.language,
+      playerPosition: state.playerPosition,
+      playerRotationY: state.playerRotation,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+    console.log('Game saved!');
+  },
+  
+  loadGame: () => {
+    try {
+      const saved = localStorage.getItem(SAVE_KEY);
+      if (!saved) return false;
+      
+      const saveData: SaveData = JSON.parse(saved);
+      set({
+        player: saveData.player,
+        inventory: saveData.inventory,
+        hotbar: saveData.hotbar,
+        selectedSlot: saveData.selectedSlot,
+        dayTime: saveData.dayTime,
+        weather: saveData.weather,
+        language: saveData.language,
+        playerPosition: saveData.playerPosition || { x: 0, y: 2, z: 0 },
+        playerRotation: saveData.playerRotationY || 0,
+      });
+      console.log('Game loaded!');
+      return true;
+    } catch (e) {
+      console.error('Failed to load game:', e);
+      return false;
+    }
+  },
+  
+  hasSavedGame: () => {
+    return localStorage.getItem(SAVE_KEY) !== null;
+  },
+  
+  deleteSave: () => {
+    localStorage.removeItem(SAVE_KEY);
+  },
 }));
