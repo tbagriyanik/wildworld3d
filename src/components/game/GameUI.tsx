@@ -10,13 +10,28 @@ import { t } from '@/game/localization';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
-function StartScreen() {
-  const { language } = useGameStore();
+interface StartScreenProps {
+  onStart: (loadSave: boolean) => void;
+}
+
+function StartScreen({ onStart }: StartScreenProps) {
+  const { language, hasSavedGame } = useGameStore();
   const [isMobile, setIsMobile] = useState(false);
+  const hasSave = hasSavedGame();
   
   useEffect(() => {
     setIsMobile('ontouchstart' in window);
   }, []);
+  
+  const handleContinue = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onStart(true);
+  };
+  
+  const handleNewGame = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onStart(false);
+  };
   
   return (
     <motion.div
@@ -42,14 +57,33 @@ function StartScreen() {
         >
           Survival RPG
         </motion.p>
+        
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.6 }}
-          className="animate-pulse-glow"
+          className="flex flex-col gap-3 items-center mb-6"
         >
-          <p className="text-lg font-medium mb-4">{t('clickToStart', language)}</p>
+          {hasSave && (
+            <button
+              onClick={handleContinue}
+              className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-bold text-lg hover:bg-primary/90 transition-colors min-w-[200px]"
+            >
+              {t('continue_game', language)}
+            </button>
+          )}
+          <button
+            onClick={handleNewGame}
+            className={`px-8 py-3 rounded-lg font-bold text-lg transition-colors min-w-[200px] ${
+              hasSave 
+                ? 'bg-muted text-muted-foreground hover:bg-muted/80' 
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            }`}
+          >
+            {t('new_game', language)}
+          </button>
         </motion.div>
+        
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -74,17 +108,19 @@ function Crosshair() {
 export function GameUI() {
   const [showStart, setShowStart] = useState(true);
   const [notification, setNotification] = useState<{ message: string; icon: string } | null>(null);
+  const [saveNotification, setSaveNotification] = useState(false);
+  const { loadGame, deleteSave, language } = useGameStore();
   
-  useEffect(() => {
-    const handleClick = () => {
-      if (showStart) {
-        setShowStart(false);
-      }
-    };
-    
-    window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
-  }, [showStart]);
+  const handleStart = (loadSave: boolean) => {
+    if (loadSave) {
+      loadGame();
+      window.dispatchEvent(new CustomEvent('loadGame'));
+    } else {
+      deleteSave();
+      window.dispatchEvent(new CustomEvent('newGame'));
+    }
+    setShowStart(false);
+  };
 
   // Listen for gather events
   useEffect(() => {
@@ -103,14 +139,37 @@ export function GameUI() {
       }, 2000);
     };
     
+    const handleSave = () => {
+      setSaveNotification(true);
+      setTimeout(() => setSaveNotification(false), 2000);
+    };
+    
     window.addEventListener('gather' as any, handleGather);
-    return () => window.removeEventListener('gather' as any, handleGather);
+    window.addEventListener('gameSaved' as any, handleSave);
+    return () => {
+      window.removeEventListener('gather' as any, handleGather);
+      window.removeEventListener('gameSaved' as any, handleSave);
+    };
   }, []);
   
   return (
     <>
       <AnimatePresence>
-        {showStart && <StartScreen />}
+        {showStart && <StartScreen onStart={handleStart} />}
+      </AnimatePresence>
+      
+      {/* Save Notification */}
+      <AnimatePresence>
+        {saveNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-primary/90 text-primary-foreground px-6 py-3 rounded-lg font-bold text-lg"
+          >
+            💾 {t('game_saved', language)}
+          </motion.div>
+        )}
       </AnimatePresence>
       
       {!showStart && (

@@ -20,6 +20,7 @@ export function GameCanvas() {
   const worldObjectsRef = useRef<THREE.Object3D[]>([]);
   const particlesRef = useRef<THREE.Points | null>(null);
   const animalMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
+  const saveIntervalRef = useRef<number | null>(null);
   
   const { 
     addItem, 
@@ -33,6 +34,10 @@ export function GameCanvas() {
     updateAnimal,
     removeAnimal,
     addAnimal,
+    saveGame,
+    setPlayerPosition,
+    playerPosition,
+    playerRotation: savedPlayerRotation,
   } = useGameStore();
 
   const createTerrain = useCallback((scene: THREE.Scene) => {
@@ -508,6 +513,19 @@ export function GameCanvas() {
       if (e.key.toLowerCase() === 'e') {
         useGameStore.getState().toggleCrafting();
       }
+      
+      // Save game on F5
+      if (e.key === 'F5') {
+        e.preventDefault();
+        const state = useGameStore.getState();
+        state.setPlayerPosition({
+          x: playerRef.current.position.x,
+          y: playerRef.current.position.y,
+          z: playerRef.current.position.z,
+        });
+        state.saveGame();
+        window.dispatchEvent(new CustomEvent('gameSaved'));
+      }
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -559,6 +577,37 @@ export function GameCanvas() {
     window.addEventListener('click', handleClick);
     window.addEventListener('resize', handleResize);
     document.addEventListener('pointerlockchange', handlePointerLockChange);
+    
+    // Handle load game event
+    const handleLoadGame = () => {
+      const state = useGameStore.getState();
+      playerRef.current.position.set(
+        state.playerPosition.x,
+        state.playerPosition.y,
+        state.playerPosition.z
+      );
+      playerRef.current.rotation.y = state.playerRotation;
+    };
+    
+    // Handle new game event
+    const handleNewGame = () => {
+      playerRef.current.position.set(0, 2, 0);
+      playerRef.current.rotation.set(0, 0, 0);
+    };
+    
+    window.addEventListener('loadGame', handleLoadGame);
+    window.addEventListener('newGame', handleNewGame);
+    
+    // Auto-save every 60 seconds
+    saveIntervalRef.current = window.setInterval(() => {
+      const state = useGameStore.getState();
+      state.setPlayerPosition({
+        x: playerRef.current.position.x,
+        y: playerRef.current.position.y,
+        z: playerRef.current.position.z,
+      });
+      state.saveGame();
+    }, 60000);
     
     // Game loop
     let dayTime = 0.5;
@@ -707,6 +756,12 @@ export function GameCanvas() {
       window.removeEventListener('click', handleClick);
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
+      window.removeEventListener('loadGame', handleLoadGame);
+      window.removeEventListener('newGame', handleNewGame);
+      
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+      }
       
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
