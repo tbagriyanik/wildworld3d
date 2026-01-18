@@ -4,6 +4,7 @@ import { useGameStore } from '@/game/gameState';
 import { resourceItems } from '@/game/recipes';
 import { Animal } from '@/game/types';
 import { createAnimal, updateAnimalAI, damageAnimal } from '@/game/animalAI';
+import { soundSystem } from '@/game/soundSystem';
 
 export function GameCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,14 +22,21 @@ export function GameCanvas() {
   const particlesRef = useRef<THREE.Points | null>(null);
   const animalMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const saveIntervalRef = useRef<number | null>(null);
+  const torchLightRef = useRef<THREE.PointLight | null>(null);
+  const torchActiveRef = useRef(false);
+  const arrowsRef = useRef<{ mesh: THREE.Mesh; velocity: THREE.Vector3; life: number }[]>([]);
+  const isPausedRef = useRef(false);
   
   const { 
     addItem, 
+    removeItem,
+    getItemCount,
     setPlayerRotation, 
     setTimeOfDay, 
     weather,
     updatePlayerStats,
     damagePlayer,
+    healPlayer,
     animals,
     setAnimals,
     updateAnimal,
@@ -38,6 +46,7 @@ export function GameCanvas() {
     setPlayerPosition,
     playerPosition,
     playerRotation: savedPlayerRotation,
+    selectedSlot,
   } = useGameStore();
 
   const createTerrain = useCallback((scene: THREE.Scene) => {
@@ -168,6 +177,7 @@ export function GameCanvas() {
     water.userData = { type: 'water', gatherable: false };
     
     scene.add(water);
+    worldObjectsRef.current.push(water);
     
     return water;
   }, []);
@@ -291,7 +301,112 @@ export function GameCanvas() {
     positions.needsUpdate = true;
   }, [weather]);
 
-  const handleGather = useCallback(() => {
+  const shootArrow = useCallback(() => {
+    if (!sceneRef.current || !cameraRef.current) return;
+    
+    const arrowCount = useGameStore.getState().getItemCount('arrow');
+    if (arrowCount <= 0) {
+      window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'no_arrows', icon: '❌' } }));
+      return;
+    }
+    
+    useGameStore.getState().removeItem('arrow', 1);
+    soundSystem.play('bow_shoot');
+    
+    // Create arrow mesh
+    const arrowGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 6);
+    const arrowMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+    
+    // Position at camera
+    arrow.position.copy(cameraRef.current.position);
+    arrow.rotation.copy(cameraRef.current.rotation);
+    arrow.rotateX(Math.PI / 2);
+    
+    // Get direction from camera
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(cameraRef.current.quaternion);
+    
+    sceneRef.current.add(arrow);
+    arrowsRef.current.push({
+      mesh: arrow,
+      velocity: direction.multiplyScalar(50),
+      life: 3,
+    });
+  }, []);
+
+  const toggleTorch = useCallback(() => {
+    if (!sceneRef.current) return;
+    
+    const hasTorch = useGameStore.getState().getItemCount('torch') > 0;
+    if (!hasTorch && !torchActiveRef.current) {
+      window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'need_torch', icon: '❌' } }));
+      return;
+    }
+    
+    if (torchActiveRef.current) {
+      // Turn off torch
+      if (torchLightRef.current && sceneRef.current) {
+        sceneRef.current.remove(torchLightRef.current);
+        torchLightRef.current = null;
+      }
+      torchActiveRef.current = false;
+      soundSystem.play('torch_light');
+      window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'torch_off', icon: '🔦' } }));
+    } else {
+      // Turn on torch
+      const light = new THREE.PointLight(0xffa500, 2, 20);
+      torchLightRef.current = light;
+      sceneRef.current.add(light);
+      torchActiveRef.current = true;
+      soundSystem.play('torch_light');
+      window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'torch_on', icon: '🔦' } }));
+    }
+  }, []);
+
+  const drinkWater = useCallback(() => {
+    const waterBottle = useGameStore.getState().getItemCount('water_bottle');
+    if (waterBottle <= 0) {
+      window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'need_water', icon: '❌' } }));
+      return;
+    }
+    
+    useGameStore.getState().removeItem('water_bottle', 1);
+    useGameStore.getState().updatePlayerStats({ thirst: Math.min(100, useGameStore.getState().player.thirst + 30) });
+    soundSystem.play('drink');
+    window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'drank_water', icon: '💧' } }));
+  }, []);
+
+  const eatFood = useCallback((type: 'fruit' | 'meat') => {
+    const state = useGameStore.getState();
+    
+    if (type === 'fruit') {
+      const apples = state.getItemCount('apple');
+      const berries = state.getItemCount('berry');
+      
+      if (apples > 0) {
+        state.removeItem('apple', 1);
+      } else if (berries > 0) {
+        state.removeItem('berry', 1);
+      } else {
+        return;
+      }
+      
+      state.updatePlayerStats({ hunger: Math.min(100, state.player.hunger + 15) });
+    } else {
+      const meat = state.getItemCount('meat');
+      if (meat <= 0) return;
+      
+      state.removeItem('meat', 1);
+      state.updatePlayerStats({ hunger: Math.min(100, state.player.hunger + 35) });
+      state.healPlayer(10);
+    }
+    
+    soundSystem.play('eat');
+    window.dispatchEvent(new CustomEvent('gameAction', { detail: { action: 'ate_food', icon: type === 'fruit' ? '🍎' : '🥩' } }));
+  }, []);
+
+  const handleInteract = useCallback(() => {
     if (!cameraRef.current || !sceneRef.current) return;
     
     const raycaster = new THREE.Raycaster();
@@ -306,12 +421,25 @@ export function GameCanvas() {
         object = object.parent as THREE.Object3D;
       }
       
+      // Check for water - fill water bottle
+      if (object.userData.type === 'water') {
+        const leather = useGameStore.getState().getItemCount('leather');
+        if (leather >= 1) {
+          useGameStore.getState().removeItem('leather', 1);
+          useGameStore.getState().addItem(resourceItems.water_bottle || { id: 'water_bottle', name: 'Water Bottle', nameKey: 'water_bottle', icon: '🫗', type: 'consumable' }, 1);
+          soundSystem.play('drink');
+          window.dispatchEvent(new CustomEvent('gather', { detail: { resourceKey: 'water_bottle', icon: '🫗', quantity: 1 } }));
+        }
+        return;
+      }
+      
       // Handle animal hunting
       if (object.userData.type === 'animal') {
         const animalId = object.userData.animalId;
         const animalData = useGameStore.getState().animals.find(a => a.id === animalId);
         
         if (animalData && animalData.behavior !== 'dead') {
+          soundSystem.play('animal_hit');
           const updates = damageAnimal(animalData, 25);
           updateAnimal(animalId, updates);
           
@@ -365,6 +493,7 @@ export function GameCanvas() {
         const resource = resourceItems[resourceId];
         
         if (resource) {
+          soundSystem.play('gather');
           const quantity = Math.floor(Math.random() * 2) + 1;
           addItem(resource, quantity);
           
@@ -406,6 +535,31 @@ export function GameCanvas() {
       }
     }
   }, [addItem, createTree, createRock, createBush, updateAnimal, removeAnimal, addAnimal]);
+
+  const handleUseItem = useCallback(() => {
+    const slot = useGameStore.getState().selectedSlot;
+    
+    switch (slot) {
+      case 0: // Bow
+        shootArrow();
+        break;
+      case 1: // Torch
+        toggleTorch();
+        break;
+      case 2: // Water bottle
+        drinkWater();
+        break;
+      case 3: // Fruit
+        eatFood('fruit');
+        break;
+      case 4: // Meat
+        eatFood('meat');
+        break;
+      default:
+        // Regular interact
+        handleInteract();
+    }
+  }, [shootArrow, toggleTorch, drinkWater, eatFood, handleInteract]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -508,10 +662,13 @@ export function GameCanvas() {
     
     // Controls
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isPausedRef.current) return;
+      
       keysRef.current.add(e.key.toLowerCase());
       
+      // E for interaction
       if (e.key.toLowerCase() === 'e') {
-        useGameStore.getState().toggleCrafting();
+        handleInteract();
       }
       
       // Save game on F5
@@ -533,7 +690,7 @@ export function GameCanvas() {
     };
     
     const handleMouseMove = (e: MouseEvent) => {
-      if (mouseRef.current.locked) {
+      if (mouseRef.current.locked && !isPausedRef.current) {
         const sensitivity = 0.002;
         playerRef.current.rotation.y -= e.movementX * sensitivity;
         playerRef.current.rotation.x -= e.movementY * sensitivity;
@@ -546,10 +703,13 @@ export function GameCanvas() {
     };
     
     const handleClick = () => {
+      if (isPausedRef.current) return;
+      
       if (!mouseRef.current.locked) {
         renderer.domElement.requestPointerLock();
+        soundSystem.resume();
       } else {
-        handleGather();
+        handleUseItem();
       }
     };
     
@@ -564,6 +724,7 @@ export function GameCanvas() {
     };
     
     const handleNumberKey = (e: KeyboardEvent) => {
+      if (isPausedRef.current) return;
       const num = parseInt(e.key);
       if (num >= 1 && num <= 8) {
         useGameStore.getState().selectSlot(num - 1);
@@ -594,9 +755,21 @@ export function GameCanvas() {
       playerRef.current.position.set(0, 2, 0);
       playerRef.current.rotation.set(0, 0, 0);
     };
+
+    // Handle pause/resume
+    const handlePause = () => {
+      isPausedRef.current = true;
+      document.exitPointerLock();
+    };
+
+    const handleResume = () => {
+      isPausedRef.current = false;
+    };
     
     window.addEventListener('loadGame', handleLoadGame);
     window.addEventListener('newGame', handleNewGame);
+    window.addEventListener('pauseGame', handlePause);
+    window.addEventListener('resumeGame', handleResume);
     
     // Auto-save every 60 seconds
     saveIntervalRef.current = window.setInterval(() => {
@@ -616,6 +789,11 @@ export function GameCanvas() {
     const animate = () => {
       requestAnimationFrame(animate);
       
+      if (isPausedRef.current) {
+        renderer.render(scene, camera);
+        return;
+      }
+      
       const delta = clockRef.current.getDelta();
       
       // Player movement
@@ -634,6 +812,11 @@ export function GameCanvas() {
         playerRef.current.position.y = 2;
         playerRef.current.position.x = Math.max(-90, Math.min(90, playerRef.current.position.x));
         playerRef.current.position.z = Math.max(-90, Math.min(90, playerRef.current.position.z));
+        
+        // Play footstep sound occasionally
+        if (Math.random() < 0.02) {
+          soundSystem.play('step', 0.3);
+        }
       }
       
       // Update camera
@@ -641,6 +824,91 @@ export function GameCanvas() {
       camera.rotation.order = 'YXZ';
       camera.rotation.y = playerRef.current.rotation.y;
       camera.rotation.x = playerRef.current.rotation.x;
+      
+      // Update torch light position
+      if (torchLightRef.current) {
+        torchLightRef.current.position.copy(camera.position);
+        torchLightRef.current.position.y -= 0.3;
+        
+        // Torch warms the player
+        const state = useGameStore.getState();
+        if (state.player.temperature < 60) {
+          updatePlayerStats({ temperature: Math.min(60, state.player.temperature + 0.05) });
+        }
+      }
+      
+      // Update arrows
+      arrowsRef.current = arrowsRef.current.filter(arrow => {
+        arrow.mesh.position.add(arrow.velocity.clone().multiplyScalar(delta));
+        arrow.life -= delta;
+        
+        // Check arrow collision with animals
+        const currentAnimals = useGameStore.getState().animals;
+        for (const animal of currentAnimals) {
+          if (animal.behavior === 'dead') continue;
+          
+          const dist = arrow.mesh.position.distanceTo(new THREE.Vector3(animal.position.x, 1, animal.position.z));
+          if (dist < 1.5) {
+            soundSystem.play('arrow_hit');
+            const updates = damageAnimal(animal, 40);
+            updateAnimal(animal.id, updates);
+            
+            if (updates.behavior === 'dead') {
+              animal.drops.forEach(drop => {
+                const resource = resourceItems[drop.itemId as keyof typeof resourceItems];
+                if (resource) {
+                  addItem(resource, drop.quantity);
+                }
+              });
+              
+              window.dispatchEvent(new CustomEvent('gather', {
+                detail: {
+                  resourceKey: animal.type,
+                  icon: animal.type === 'deer' ? '🦌' : animal.type === 'rabbit' ? '🐰' : '🐺',
+                  quantity: 1
+                }
+              }));
+              
+              setTimeout(() => {
+                const mesh = animalMeshesRef.current.get(animal.id);
+                if (mesh && sceneRef.current) {
+                  sceneRef.current.remove(mesh);
+                  animalMeshesRef.current.delete(animal.id);
+                  const idx = worldObjectsRef.current.indexOf(mesh);
+                  if (idx > -1) worldObjectsRef.current.splice(idx, 1);
+                }
+                removeAnimal(animal.id);
+                
+                setTimeout(() => {
+                  const types: Animal['type'][] = ['deer', 'rabbit', 'wolf'];
+                  const newType = types[Math.floor(Math.random() * types.length)];
+                  const newAnimal = createAnimal(newType, {
+                    x: (Math.random() - 0.5) * 80,
+                    z: (Math.random() - 0.5) * 80,
+                  });
+                  addAnimal(newAnimal);
+                  if (sceneRef.current) {
+                    createAnimalMesh(sceneRef.current, newAnimal);
+                  }
+                }, 15000);
+              }, 2000);
+            }
+            
+            scene.remove(arrow.mesh);
+            return false;
+          }
+        }
+        
+        if (arrow.life <= 0 || arrow.mesh.position.y < 0) {
+          scene.remove(arrow.mesh);
+          return false;
+        }
+        
+        // Apply gravity
+        arrow.velocity.y -= 9.8 * delta;
+        
+        return true;
+      });
       
       // Update animals AI
       const currentAnimals = useGameStore.getState().animals;
@@ -671,6 +939,9 @@ export function GameCanvas() {
           );
           if (dist < 2) {
             useGameStore.getState().damagePlayer(0.1);
+            if (Math.random() < 0.01) {
+              soundSystem.play('wolf_growl');
+            }
           }
         }
       });
@@ -758,6 +1029,8 @@ export function GameCanvas() {
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
       window.removeEventListener('loadGame', handleLoadGame);
       window.removeEventListener('newGame', handleNewGame);
+      window.removeEventListener('pauseGame', handlePause);
+      window.removeEventListener('resumeGame', handleResume);
       
       if (saveIntervalRef.current) {
         clearInterval(saveIntervalRef.current);
@@ -768,7 +1041,7 @@ export function GameCanvas() {
       }
       renderer.dispose();
     };
-  }, [createTerrain, createTree, createRock, createBush, createWater, handleGather, setPlayerRotation, setTimeOfDay, createWeatherParticles, updateWeatherParticles, updatePlayerStats, createAnimalMesh, setAnimals]);
+  }, [createTerrain, createTree, createRock, createBush, createWater, handleInteract, handleUseItem, setPlayerRotation, setTimeOfDay, createWeatherParticles, updateWeatherParticles, updatePlayerStats, createAnimalMesh, setAnimals, updateAnimal, removeAnimal, addAnimal, addItem]);
 
   useEffect(() => {
     if (!sceneRef.current) return;

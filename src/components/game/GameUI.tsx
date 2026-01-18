@@ -7,6 +7,7 @@ import { LanguageToggle } from './LanguageToggle';
 import { GatherNotification } from './GatherNotification';
 import { useGameStore } from '@/game/gameState';
 import { t } from '@/game/localization';
+import { soundSystem } from '@/game/soundSystem';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
@@ -25,11 +26,13 @@ function StartScreen({ onStart }: StartScreenProps) {
   
   const handleContinue = (e: React.MouseEvent) => {
     e.stopPropagation();
+    soundSystem.play('menu_open');
     onStart(true);
   };
   
   const handleNewGame = (e: React.MouseEvent) => {
     e.stopPropagation();
+    soundSystem.play('menu_open');
     onStart(false);
   };
   
@@ -97,6 +100,51 @@ function StartScreen({ onStart }: StartScreenProps) {
   );
 }
 
+function PauseMenu({ onResume, onMainMenu }: { onResume: () => void; onMainMenu: () => void }) {
+  const { language } = useGameStore();
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-50"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="glass-panel p-8 text-center"
+      >
+        <h2 className="text-4xl font-display font-bold text-primary mb-8">
+          {t('paused', language)}
+        </h2>
+        
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={() => {
+              soundSystem.play('menu_close');
+              onResume();
+            }}
+            className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-bold text-lg hover:bg-primary/90 transition-colors min-w-[200px]"
+          >
+            {t('resume', language)}
+          </button>
+          <button
+            onClick={() => {
+              soundSystem.play('menu_open');
+              onMainMenu();
+            }}
+            className="px-8 py-3 bg-muted text-muted-foreground rounded-lg font-bold text-lg hover:bg-muted/80 transition-colors min-w-[200px]"
+          >
+            {t('main_menu', language)}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function Crosshair() {
   return (
     <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-40">
@@ -107,11 +155,15 @@ function Crosshair() {
 
 export function GameUI() {
   const [showStart, setShowStart] = useState(true);
+  const [showPause, setShowPause] = useState(false);
   const [notification, setNotification] = useState<{ message: string; icon: string } | null>(null);
   const [saveNotification, setSaveNotification] = useState(false);
-  const { loadGame, deleteSave, language } = useGameStore();
+  const { loadGame, deleteSave, language, isCraftingOpen, toggleCrafting, isPaused, setPaused } = useGameStore();
   
-  const handleStart = (loadSave: boolean) => {
+  const handleStart = async (loadSave: boolean) => {
+    // Initialize sound system
+    await soundSystem.init();
+    
     if (loadSave) {
       loadGame();
       window.dispatchEvent(new CustomEvent('loadGame'));
@@ -122,7 +174,20 @@ export function GameUI() {
     setShowStart(false);
   };
 
-  // Listen for gather events
+  const handleResume = () => {
+    setShowPause(false);
+    setPaused(false);
+    window.dispatchEvent(new CustomEvent('resumeGame'));
+  };
+
+  const handleMainMenu = () => {
+    setShowPause(false);
+    setPaused(false);
+    setShowStart(true);
+    soundSystem.stopAmbient();
+  };
+
+  // Listen for events
   useEffect(() => {
     const handleGather = (e: CustomEvent) => {
       const { language } = useGameStore.getState();
@@ -132,6 +197,7 @@ export function GameUI() {
         ? `${t(resourceName, language).toUpperCase()} TOPLANDI`
         : `${t(resourceName, language).toUpperCase()} GATHERED`;
       
+      soundSystem.play('gather');
       setNotification({ message, icon });
       
       setTimeout(() => {
@@ -143,19 +209,82 @@ export function GameUI() {
       setSaveNotification(true);
       setTimeout(() => setSaveNotification(false), 2000);
     };
+
+    const handleAction = (e: CustomEvent) => {
+      const { language } = useGameStore.getState();
+      const { action, icon } = e.detail;
+      const message = t(action, language).toUpperCase();
+      
+      setNotification({ message, icon });
+      setTimeout(() => setNotification(null), 2000);
+    };
+
+    const handlePause = () => {
+      setShowPause(true);
+      setPaused(true);
+      soundSystem.play('menu_open');
+    };
     
     window.addEventListener('gather' as any, handleGather);
     window.addEventListener('gameSaved' as any, handleSave);
+    window.addEventListener('gameAction' as any, handleAction);
+    window.addEventListener('pauseGame' as any, handlePause);
+    
     return () => {
       window.removeEventListener('gather' as any, handleGather);
       window.removeEventListener('gameSaved' as any, handleSave);
+      window.removeEventListener('gameAction' as any, handleAction);
+      window.removeEventListener('pauseGame' as any, handlePause);
     };
-  }, []);
+  }, [setPaused]);
+
+  // Handle ESC key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        
+        // If crafting menu is open, close it
+        if (isCraftingOpen) {
+          toggleCrafting();
+          soundSystem.play('menu_close');
+          return;
+        }
+        
+        // If pause menu is showing, resume
+        if (showPause) {
+          handleResume();
+          return;
+        }
+        
+        // Otherwise, show pause menu (if game started)
+        if (!showStart) {
+          window.dispatchEvent(new CustomEvent('pauseGame'));
+        }
+      }
+      
+      // C or Tab for crafting
+      if ((e.key.toLowerCase() === 'c' || e.key === 'Tab') && !showStart && !showPause) {
+        e.preventDefault();
+        toggleCrafting();
+        soundSystem.play(isCraftingOpen ? 'menu_close' : 'menu_open');
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showStart, showPause, isCraftingOpen, toggleCrafting]);
   
   return (
     <>
       <AnimatePresence>
         {showStart && <StartScreen onStart={handleStart} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPause && !showStart && (
+          <PauseMenu onResume={handleResume} onMainMenu={handleMainMenu} />
+        )}
       </AnimatePresence>
       
       {/* Save Notification */}
@@ -172,7 +301,7 @@ export function GameUI() {
         )}
       </AnimatePresence>
       
-      {!showStart && (
+      {!showStart && !showPause && (
         <>
           <Crosshair />
           
