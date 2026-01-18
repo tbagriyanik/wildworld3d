@@ -1,14 +1,31 @@
 import { useGameStore } from '@/game/gameState';
+import { fixedHotbarItems } from '@/game/recipes';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 export function Hotbar() {
-  const { hotbar, selectedSlot, selectSlot, inventory } = useGameStore();
+  const { selectedSlot, selectSlot, inventory, getItemCount } = useGameStore();
   
-  // Auto-populate hotbar with first 8 inventory items
-  const displayItems = Array(8).fill(null).map((_, index) => {
-    if (hotbar[index]) return hotbar[index];
-    return inventory[index] || null;
+  // Build display items with fixed slots and quantities
+  const displayItems = fixedHotbarItems.map((fixedItem, index) => {
+    if (!fixedItem) return null;
+    
+    // For consumables, check inventory quantity
+    let quantity = 0;
+    if (fixedItem.id === 'bow') {
+      quantity = getItemCount('bow') > 0 ? 1 : 0;
+    } else if (fixedItem.id === 'torch') {
+      quantity = getItemCount('torch') > 0 ? 1 : 0;
+    } else if (fixedItem.id === 'water_bottle') {
+      quantity = getItemCount('water_bottle');
+    } else if (fixedItem.id === 'fruit') {
+      // Fruit slot shows apples + berries
+      quantity = getItemCount('apple') + getItemCount('berry');
+    } else if (fixedItem.id === 'meat') {
+      quantity = getItemCount('meat');
+    }
+    
+    return { ...fixedItem, quantity };
   });
   
   return (
@@ -26,7 +43,8 @@ export function Hotbar() {
             'bg-muted/50 hover:bg-muted border-2',
             selectedSlot === index 
               ? 'border-primary shadow-lg shadow-primary/20 scale-105' 
-              : 'border-transparent hover:border-muted-foreground/30'
+              : 'border-transparent hover:border-muted-foreground/30',
+            item && item.quantity === 0 && 'opacity-50'
           )}
           whileHover={{ scale: selectedSlot === index ? 1.05 : 1.02 }}
           whileTap={{ scale: 0.95 }}
@@ -39,7 +57,7 @@ export function Hotbar() {
           {item ? (
             <>
               <span className="text-3xl">{item.icon}</span>
-              {item.quantity > 1 && (
+              {item.quantity > 0 && (
                 <span className="absolute bottom-1 right-1.5 text-xs font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-md min-w-[20px] text-center">
                   {item.quantity}
                 </span>

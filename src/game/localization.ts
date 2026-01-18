@@ -19,12 +19,17 @@ const translations: Record<Language, Record<string, string>> = {
     berry: 'Berry',
     meat: 'Meat',
     leather: 'Leather',
+    arrow: 'Arrow',
+    fruit: 'Fruit',
     
     // Tools
     axe: 'Axe',
     pickaxe: 'Pickaxe',
     knife: 'Knife',
     campfire: 'Campfire',
+    bow: 'Bow',
+    torch: 'Torch',
+    water_bottle: 'Water Bottle',
     
     // Actions
     gather: 'Gather',
@@ -60,9 +65,22 @@ const translations: Record<Language, Record<string, string>> = {
     new_game: 'New Game',
     game_saved: 'Game Saved!',
     
+    // Menu
+    main_menu: 'Main Menu',
+    resume: 'Resume',
+    paused: 'PAUSED',
+    
+    // Item actions
+    no_arrows: 'No arrows!',
+    need_water: 'Need water source!',
+    torch_on: 'Torch lit!',
+    torch_off: 'Torch extinguished',
+    drank_water: 'Drank water',
+    ate_food: 'Ate food',
+    
     // Instructions
     clickToStart: 'Click to Start',
-    controls: 'WASD - Move | Mouse - Look | Click - Hunt/Gather | E - Crafting | F5 - Save',
+    controls: 'WASD - Move | Mouse - Look | Click/E - Interact | C/Tab - Craft | ESC - Menu | F5 - Save',
     mobileControls: 'Drag to look | Joystick to move | Tap to gather',
   },
   tr: {
@@ -83,12 +101,17 @@ const translations: Record<Language, Record<string, string>> = {
     berry: 'Çilek',
     meat: 'Et',
     leather: 'Deri',
+    arrow: 'Ok',
+    fruit: 'Meyve',
     
     // Tools
     axe: 'Balta',
     pickaxe: 'Kazma',
     knife: 'Bıçak',
     campfire: 'Kamp Ateşi',
+    bow: 'Yay',
+    torch: 'Meşale',
+    water_bottle: 'Su Matarası',
     
     // Actions
     gather: 'Topla',
@@ -124,9 +147,22 @@ const translations: Record<Language, Record<string, string>> = {
     new_game: 'Yeni Oyun',
     game_saved: 'Oyun Kaydedildi!',
     
+    // Menu
+    main_menu: 'Ana Menü',
+    resume: 'Devam',
+    paused: 'DURDURULDU',
+    
+    // Item actions
+    no_arrows: 'Ok yok!',
+    need_water: 'Su kaynağı gerekli!',
+    torch_on: 'Meşale yandı!',
+    torch_off: 'Meşale söndü',
+    drank_water: 'Su içildi',
+    ate_food: 'Yemek yendi',
+    
     // Instructions
     clickToStart: 'Başlamak için tıkla',
-    controls: 'WASD - Hareket | Mouse - Bak | Tıkla - Avla/Topla | E - Üretim | F5 - Kaydet',
+    controls: 'WASD - Hareket | Mouse - Bak | Tıkla/E - Etkileşim | C/Tab - Üretim | ESC - Menü | F5 - Kaydet',
     mobileControls: 'Bakmak için sürükle | Hareket için joystick | Toplamak için dokun',
   },
 };
